@@ -1,0 +1,27 @@
+name: Update time files
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write UTC time files
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > time.txt
+          node -e 'const t=Date.now(); require("fs").writeFileSync("time.json", JSON.stringify({ epoch_ms: t, utc: new Date(t).toISOString() }))'
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then
+            echo "No changes"; exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add time.txt time.json
+          git commit -m "update time"
+          git push
