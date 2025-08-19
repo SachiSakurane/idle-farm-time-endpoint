@@ -2,27 +2,50 @@ name: Update time files
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/5 * * * *"  # 5分ごと
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-      - name: Write UTC time files
+      - name: Write UTC time files (ISO8601 & epoch_ms)
+        shell: bash
         run: |
+          set -euo pipefail
+          # ISO8601（常にZ, 秒まで）
           date -u +"%Y-%m-%dT%H:%M:%SZ" > time.txt
+
+          # epochミリ秒（GNU date の %3N 使用、Node での冪等バックアップも）
+          EPOCH_MS="$(date +%s%3N 2>/dev/null || node -e 'process.stdout.write(String(Date.now()))')"
+
+          # JSON も更新
           node -e 'const t=Date.now(); require("fs").writeFileSync("time.json", JSON.stringify({ epoch_ms: t, utc: new Date(t).toISOString() }))'
 
-      - name: Commit changes
+          echo "---- preview ----"
+          echo "time.txt:   $(cat time.txt)"
+          echo "time.json:  $(cat time.json)"
+
+      - name: Show diff
+        run: |
+          git status --porcelain
+          git --no-pager diff --name-only || true
+
+      - name: Commit & push if changed
         run: |
           if git diff --quiet; then
-            echo "No changes"; exit 0
+            echo "No changes"
+            exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add time.txt time.json
-          git commit -m "update time"
+          git commit -m "update time: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           git push
